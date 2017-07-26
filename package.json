@@ -1,0 +1,33 @@
+{
+  "name": "questbook",
+  "version": "1.0.0",
+  "description": "QuestBook javascript implementation",
+  "main": "lib/index.js",
+  "dependencies": {},
+  "devDependencies": {
+    "rimraf": "^2.6.1",
+    "tslint": "^5.5.0",
+    "typescript": "^2.4.2"
+  },
+  "scripts": {
+    "prepublishOnly": "npm run dist",
+    "watch": "node_modules/.bin/tsc -w",
+    "dist": "rimraf ./lib && node_modules/.bin/tsc"
+  },
+  "keywords": [
+    "questbook",
+    "narrative",
+    "book",
+    "story",
+    "quest",
+    "dialogue"
+  ],
+  "author": "Leopotam <leopotam@gmail.com>",
+  "homepage": "https://github.com/Leopotam/questbook-js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Leopotam/questbook-js.git"
+  },
+  "license": "MIT",
+  "types": "lib/index.d.ts"
+}
