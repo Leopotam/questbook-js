@@ -1,6 +1,11 @@
 import * as QB from './types';
 import QuestDocument from './document';
 
+enum QuestLogicFilter {
+    State,
+    Expression
+}
+
 class QuestStream {
     public lines: string[];
     public pointer: number;
@@ -22,8 +27,16 @@ class QuestStream {
     }
 }
 
-export default class QuestLoader {
-    public static loadMarkup(markup: string, validate: boolean): QuestDocument {
+/**
+ * Class-helper, provides api for loading / parsing quest markup data.
+ */
+export default abstract class QuestLoader {
+    /**
+     * Loads and parses quest markup data to QuestDocument.
+     * No additional logical structure checks, use "validate" method for it.
+     * @param markup Markup source of quest data.
+     */
+    public static loadMarkup(markup: string): QuestDocument {
         if (!markup) {
             throw new Error(`Invalid markup data`);
         }
@@ -40,13 +53,14 @@ export default class QuestLoader {
                 doc.entry = name;
             }
         }
-        if (validate) {
-            this.validate(doc);
-        }
         doc.resetState();
         return doc;
     }
 
+    /**
+     * Validates QuestDocument for possible errors. Exception will be thrown on any detected error.
+     * @param doc Document to validate.
+     */
     public static validate(doc: QuestDocument): void {
         const links: { [key: string]: boolean } = {};
         links[doc.entry] = true;
@@ -105,7 +119,7 @@ export default class QuestLoader {
             if (matching === null || !matching[1]) {
                 throw new Error(`Invalid logic at line: ${stream.pointer}`);
             }
-            const cond = this.parseLogic(QB.QuestLogicFilter.State, matching[1], stream.pointer);
+            const cond = this.parseLogic(QuestLogicFilter.State, matching[1], stream.pointer);
             if (cond) {
                 if (!page.logics) { page.logics = []; }
                 page.logics.push(cond);
@@ -147,11 +161,10 @@ export default class QuestLoader {
                 if (matchingCond === null) {
                     choice.text = rawChoiceText.trim();
                 } else {
-                    choice.condition = this.parseLogic(QB.QuestLogicFilter.Expression, matchingCond[1], lineId);
+                    choice.condition = this.parseLogic(QuestLogicFilter.Expression, matchingCond[1], lineId);
                     choice.text = matchingCond[2].trim();
                 }
             }
-
             page.choices.push(choice);
         }
         if (page.choices.length === 0) {
@@ -162,7 +175,7 @@ export default class QuestLoader {
         }
     }
 
-    private static parseLogic(filter: QB.QuestLogicFilter, code: string, lineId: number): QB.IQuestLogic {
+    private static parseLogic(filter: QuestLogicFilter, code: string, lineId: number): QB.IQuestLogic {
         const matchingFull = /(\w+)\s*(?:([<>=+!]+)\s*(-?\w+)?)?/.exec(code);
         if (matchingFull === null || (matchingFull[2] && !matchingFull[3])) {
             throw new Error(`Invalid logic syntax at line: ${lineId}`);
@@ -184,7 +197,7 @@ export default class QuestLoader {
         switch (operator) {
             case '+=':
             case '=':
-                if (filter !== QB.QuestLogicFilter.State) {
+                if (filter !== QuestLogicFilter.State) {
                     throw new Error(`Should be conditional expression at line: ${lineId}`);
                 }
                 break;
@@ -192,7 +205,7 @@ export default class QuestLoader {
             case '==':
             case '<':
             case '>':
-                if (filter !== QB.QuestLogicFilter.Expression) {
+                if (filter !== QuestLogicFilter.Expression) {
                     throw new Error(`Should be non conditional expression at line: ${lineId}`);
                 }
                 break;
