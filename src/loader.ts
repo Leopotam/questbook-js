@@ -7,21 +7,21 @@ enum QuestLogicFilter {
 }
 
 class QuestStream {
-    public lines: string[];
     public pointer: number;
+    private _lines: string[];
     constructor(markup: string) {
-        this.lines = markup.split('\n');
+        this._lines = markup.split('\n');
         this.pointer = 0;
     }
     public eof(): boolean {
-        return this.pointer >= this.lines.length;
+        return this.pointer >= this._lines.length;
     }
     public previous() {
         if (this.pointer > 0) { this.pointer--; }
     }
     public next(): string {
         if (this.eof()) { return ''; }
-        const line = this.lines[this.pointer].trim();
+        const line = this._lines[this.pointer].trim();
         this.pointer++;
         return line.length > 0 && line.indexOf('//') !== 0 ? line : this.next();
     }
@@ -53,7 +53,7 @@ export default abstract class QuestLoader {
                 doc.entry = name;
             }
         }
-        doc.resetState();
+        doc.resetProgress();
         return doc;
     }
 
@@ -94,23 +94,23 @@ export default abstract class QuestLoader {
         }
     }
 
-    private static parsePage(stream: QuestStream): { page: QB.IQuestPage, name: string } {
+    private static parsePage(stream: QuestStream): { page: QB.QuestPage, name: string } {
         const matching = /->\s*?(\b.+)/.exec(stream.next());
         if (matching === null) {
-            throw new Error(`Invalid page header at line: ${stream.pointer}, should be in "=> PageName" form`);
+            throw new Error(`Invalid page header at line: ${stream.pointer}`);
         }
         const name = matching[1].toLowerCase();
         if (name === 'end') {
-            throw new Error(`Invalid page name at line: ${stream.pointer}, END is reserved page`);
+            throw new Error(`Invalid page name at line: ${stream.pointer}`);
         }
-        const page: QB.IQuestPage = { texts: [], choices: [] };
+        const page = new QB.QuestPage();
         this.parsePageLogics(page, stream);
         this.parsePageTexts(page, stream);
         this.parsePageChoices(page, stream);
         return { page, name };
     }
 
-    private static parsePageLogics(page: QB.IQuestPage, stream: QuestStream) {
+    private static parsePageLogics(page: QB.QuestPage, stream: QuestStream) {
         while (true) {
             const line = stream.next();
             if (line.length === 0) { break; }
@@ -127,7 +127,7 @@ export default abstract class QuestLoader {
         }
     }
 
-    private static parsePageTexts(page: QB.IQuestPage, stream: QuestStream) {
+    private static parsePageTexts(page: QB.QuestPage, stream: QuestStream) {
         const buf: string[] = [];
         while (true) {
             const line = stream.next();
@@ -141,7 +141,7 @@ export default abstract class QuestLoader {
         page.texts.push(...buf.join(' ').split(/\s?\[br\]\s?/));
     }
 
-    private static parsePageChoices(page: QB.IQuestPage, stream: QuestStream) {
+    private static parsePageChoices(page: QB.QuestPage, stream: QuestStream) {
         let lineId = stream.pointer;
         while (true) {
             const line = stream.next();
@@ -152,9 +152,8 @@ export default abstract class QuestLoader {
                 throw new Error(`Invalid choice syntax at line: ${lineId}`);
             }
             lineId = stream.pointer;
-            const choice: QB.IQuestChoice = {
-                link: matching[2].toLowerCase()
-            };
+            const choice = new QB.QuestChoice();
+            choice.link = matching[2].toLowerCase();
             const rawChoiceText = matching[1];
             if (rawChoiceText) {
                 const matchingCond = /\{(.*?)\}(.+)/.exec(rawChoiceText);
@@ -175,26 +174,25 @@ export default abstract class QuestLoader {
         }
     }
 
-    private static parseLogic(filter: QuestLogicFilter, code: string, lineId: number): QB.IQuestLogic {
+    private static parseLogic(filter: QuestLogicFilter, code: string, lineId: number): QB.QuestLogic {
         const matchingFull = /(\w+)\s*(?:([<>=+!]+)\s*(-?\w+)?)?/.exec(code);
         if (matchingFull === null || (matchingFull[2] && !matchingFull[3])) {
             throw new Error(`Invalid logic syntax at line: ${lineId}`);
         }
-        const lhs = matchingFull[1].toLowerCase();
-        let operator: string;
-        let rhs: number;
+        const logic = new QB.QuestLogic();
+        logic.lhs = matchingFull[1].toLowerCase();
         if (matchingFull[3]) {
-            operator = matchingFull[2];
+            logic.operation = matchingFull[2];
             try {
-                rhs = parseInt(matchingFull[3], 10);
+                logic.rhs = parseInt(matchingFull[3], 10);
             } catch (ex) {
                 throw new Error(`Invalid expression at line: ${lineId}, only numbers supported on right side`);
             }
         } else {
-            operator = '>';
-            rhs = 0;
+            logic.operation = '>';
+            logic.rhs = 0;
         }
-        switch (operator) {
+        switch (logic.operation) {
             case '+=':
             case '=':
                 if (filter !== QuestLogicFilter.State) {
@@ -212,6 +210,6 @@ export default abstract class QuestLoader {
             default:
                 throw new Error(`Invalid logic operation at line: ${lineId}`);
         }
-        return { lhs, operator, rhs };
+        return logic;
     }
 }

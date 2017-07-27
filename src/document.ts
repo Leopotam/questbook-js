@@ -12,27 +12,34 @@ export default class QuestDocument {
     /**
      * Map (<key, page>) of all quest pages. Dont use / change it directly.
      */
-    public pages: { [Key: string]: QB.IQuestPage } = {};
+    public pages: { [Key: string]: QB.QuestPage } = {};
 
     /**
      * Actual progress state, can be saved / loaded. Dont use / change it directly.
      */
-    public state: QB.IQuestState = { currentPage: '', vars: {} };
+    public state: QB.QuestProgress = new QB.QuestProgress();
 
     /**
      * Uses specified choice to activate redirection to new page.
-     * @param id Choice number (zero-based) at choices list of current page.
+     * @param choice Choice to redirect.
      */
-    public makeChoice(id: number) {
-        const page = this.getCurrentPage();
-        if (page) {
-            const choice = page.choices[id];
-            if (choice) {
-                if (!choice.condition || this.processLogic(choice.condition)) {
-                    this.setCurrentPage(choice.link);
-                }
-            }
+    public makeChoice(choice: QB.QuestChoice) {
+        if (this.isChoiceVisible(choice)) {
+            this.setCurrentPage(choice.link);
         }
+    }
+
+    /**
+     * Checks for auto execution single choice without text and process it if requires.
+     * Will return success of this check & execution.
+     * @param page Page to check.
+     */
+    public makeAutoChoice(page: QB.QuestPage): boolean {
+        if (page.choices.length === 1 && !page.choices[0].text) {
+            this.setCurrentPage(page.choices[0].link);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -46,34 +53,34 @@ export default class QuestDocument {
     /**
      * Requests data of current page. Will return undefined if page not exists.
      */
-    public getCurrentPage(): QB.IQuestPage | undefined {
+    public getCurrentPage(): QB.QuestPage | undefined {
         return this.pages[this.state.currentPage];
     }
 
     /**
      * Reset actual progress to default values and entry point.
      */
-    public resetState() {
+    public resetProgress() {
         this.state.currentPage = this.entry;
         this.state.vars = {};
     }
 
     /**
-     * Saves actual progress to JSON string.
+     * Returns actual progress.
      */
-    public saveState(): string {
-        return JSON.stringify(this.state);
+    public getProgress(): QB.QuestProgress {
+        return this.state;
     }
 
     /**
-     * Tries to load new progress state from JSON string. Will throw exception on error.
-     * @param jsonState New state ini JSON form.
+     * Tries to load new progress state.
+     * @param progress New progress state
      */
-    public loadState(jsonState: string) {
+    public setProgress(progress: QB.QuestProgress) {
         try {
-            const loadedState = JSON.parse(jsonState);
-            this.state.currentPage = this.state.currentPage.toLowerCase();
-            this.state = loadedState;
+            progress.currentPage = progress.currentPage.toLowerCase();
+            if (!progress.vars) { throw new Error(); }
+            this.state = progress;
         } catch (ex) {
             throw new Error(`State loading error: ${ex}`);
         }
@@ -105,8 +112,8 @@ export default class QuestDocument {
      * Tries to process specified logic. Will return result of conditional logic, or false for common states.
      * @param logic Logic block to process.
      */
-    public processLogic(logic: QB.IQuestLogic): boolean {
-        switch (logic.operator) {
+    public processLogic(logic: QB.QuestLogic): boolean {
+        switch (logic.operation) {
             case '+=':
                 this.setVariable(logic.lhs, this.getVariable(logic.lhs) + logic.rhs);
                 return false;
@@ -134,5 +141,13 @@ export default class QuestDocument {
         return text.replace(/\{\s*?(\w+)\s*?\}/g, (s, s1: string) => {
             return this.getVariable(s1.toLowerCase()).toString();
         });
+    }
+
+    /**
+     * Checks choice visibility with respect optional condition.
+     * @param choice Choice to test.
+     */
+    public isChoiceVisible(choice: QB.QuestChoice): boolean {
+        return choice && (!choice.condition || this.processLogic(choice.condition));
     }
 }
